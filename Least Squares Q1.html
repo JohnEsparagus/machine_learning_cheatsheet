@@ -1,0 +1,760 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Least Squares Q1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout concept: a lab bench. One card per idea, each with a live plot on top of the numbers it draws.
+   Colour roles: blue = your model, orange = error and your current guess, green = the solution nsolve returns,
+   magenta = held-out test data, slate = loss contours and training data. */
+:root{
+  --bg:#f2f2ee; --surface:#fcfcfb; --surface2:#f6f6f3; --fg:#161615; --fg2:#52514e; --muted:#76756f; --line:#dcdbd4;
+  --q:#2a78d6; --k:#d95926; --v:#16966a; --h1:#c0376f; --att:#34506f; --bad:#c23030;
+  --on-hi:#ffffff; --focus:#2a78d6;
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"Instrument Sans","Segoe UI",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121211; --surface:#1a1a19; --surface2:#222220; --fg:#f0efec; --fg2:#c3c2b7; --muted:#9a998f; --line:#34332f;
+    --q:#4a93ea; --k:#ee7b4a; --v:#2bb887; --h1:#e0638f; --att:#9bb7d8; --bad:#ec6a6a;
+    --on-hi:#0b0b0b; --focus:#6da7ec; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121211; --surface:#1a1a19; --surface2:#222220; --fg:#f0efec; --fg2:#c3c2b7; --muted:#9a998f; --line:#34332f;
+  --q:#4a93ea; --k:#ee7b4a; --v:#2bb887; --h1:#e0638f; --att:#9bb7d8; --bad:#ec6a6a;
+  --on-hi:#0b0b0b; --focus:#6da7ec; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:12px}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.page{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(30px,5vw,46px);font-weight:700;letter-spacing:-.012em}
+h2{font-size:22px;font-weight:600}
+h3{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+p{margin:0}
+b{font-weight:600}
+.eyebrow{font-family:var(--f-mono);font-size:12px;color:var(--muted);margin-bottom:10px}
+.lede{max-width:72ch;color:var(--fg2);margin-top:12px;font-size:16px}
+.sub{max-width:76ch;color:var(--fg2);margin-top:6px}
+.mono,.f{font-family:var(--f-mono)}
+.f{font-size:13px}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:6px}
+sub,sup{line-height:0;font-size:.75em}
+
+.steps{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.steps a{flex:1 0 auto;min-width:112px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 12px;text-decoration:none;color:inherit;
+  display:flex;flex-direction:column;gap:2px}
+.steps a:hover{border-color:var(--fg2)}
+.steps a b{font-family:var(--f-mono);font-size:11px;font-weight:500;color:var(--muted)}
+.steps a span{font-weight:600;font-size:13px;line-height:1.2}
+.map{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:16px}
+.map div{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px}
+.map .f{font-weight:500;font-size:14px}
+.map span{font-size:13px;color:var(--fg2)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:16px}
+.bar{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.ctl{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;max-width:100%}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.btn{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-weight:500}
+.btn:hover{border-color:var(--fg2)}
+.btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow-x:auto;max-width:100%;background:var(--surface)}
+.seg button{white-space:nowrap}
+.seg button{background:transparent;border:0;padding:5px 11px;font-size:13px;font-weight:500;border-right:1px solid var(--line)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+.slid{display:flex;align-items:center;gap:8px;font-family:var(--f-mono);font-size:12px}
+.slid input[type=range]{width:130px;accent-color:var(--k)}
+.slid output{min-width:44px;text-align:right}
+.slid.off{opacity:.4}
+
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start}
+.two.wide-l{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr)}
+@media (max-width:860px){.two,.two.wide-l{grid-template-columns:minmax(0,1fr)}}
+.fig{margin:0;display:flex;flex-direction:column;gap:6px;min-width:0}
+.fig figcaption{font-size:12px;color:var(--fg2);font-family:var(--f-mono)}
+svg.plot{width:100%;height:auto;display:block;background:var(--surface2);border:1px solid var(--line);border-radius:10px;max-width:640px}
+svg.plot text{font-family:var(--f-mono);font-size:11px;fill:var(--fg2);paint-order:stroke;stroke:var(--surface2);stroke-width:3px;stroke-linejoin:round}
+svg.plot text.big{font-size:12px;fill:var(--fg);font-weight:500}
+svg.plot .grid{stroke:var(--line);stroke-width:1;opacity:.8}
+svg.plot .axis{stroke:var(--muted);stroke-width:1}
+svg.plot .pt{fill:var(--fg);stroke:var(--surface2);stroke-width:2}
+svg.plot .fit{stroke:var(--q);stroke-width:3;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg.plot .best{stroke:var(--v);stroke-width:2;stroke-dasharray:6 5;fill:none}
+svg.plot .truth{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 4;fill:none}
+svg.plot .sq{fill:color-mix(in srgb,var(--k) 20%,transparent);stroke:var(--k);stroke-width:1}
+svg.plot .ring{fill:none;stroke:var(--att);stroke-width:1.2;opacity:.55}
+svg.plot .ring.me{stroke:var(--k);opacity:1;stroke-dasharray:4 3;stroke-width:1.8}
+svg.plot .star{fill:var(--v);stroke:var(--surface2);stroke-width:1.5}
+svg.plot .star.hollow{fill:none;stroke:var(--muted);stroke-width:2}
+svg.plot .dot{fill:var(--k);stroke:var(--surface2);stroke-width:2.5}
+svg.plot .grab{fill:var(--surface);stroke:var(--q);stroke-width:3}
+svg.plot .hit{fill:transparent;cursor:grab;touch-action:none}
+svg.plot .hit:active{cursor:grabbing}
+svg.plot .cons{stroke:var(--muted);stroke-width:2;stroke-dasharray:5 4}
+svg.plot .tr{fill:var(--att);fill-opacity:.35;stroke:var(--att);stroke-width:1}
+svg.plot .te{fill:var(--h1);stroke:var(--surface2);stroke-width:1.5}
+svg.plot .te.hollow{fill:var(--surface2);stroke:var(--h1);stroke-width:2}
+svg.plot .ln-tr{stroke:var(--att);stroke-width:2;fill:none}
+svg.plot .ln-te{stroke:var(--h1);stroke-width:2;fill:none}
+svg.plot .sel{fill:var(--fg);opacity:.07}
+svg.plot .res{stroke:var(--h1);stroke-width:1;opacity:.5}
+svg.plot .vec{stroke-width:3;fill:none;stroke-linecap:round}
+svg.plot .mk-q{fill:var(--q)} svg.plot .mk-k{fill:var(--k)} svg.plot .mk-fg{fill:var(--fg)} svg.plot .mk-v{fill:var(--v)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12px;color:var(--fg2)}
+.legend i{display:inline-block;width:14px;height:0;border-top:3px solid;vertical-align:middle;margin-right:5px}
+.legend i.d{border-top-style:dashed}
+.legend i.b{width:10px;height:10px;border:1px solid;border-radius:2px}
+.legend i.c{width:10px;height:10px;border-radius:50%;border:0}
+
+.stats{display:flex;flex-wrap:wrap;gap:8px}
+.stat{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;display:flex;flex-direction:column;gap:1px;min-width:108px}
+.stat span{font-size:11px;color:var(--muted);font-family:var(--f-mono)}
+.stat b{font-family:var(--f-mono);font-size:15px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat.good b{color:var(--v)} .stat.warn b{color:var(--k)}
+.note{background:var(--surface2);border-left:3px solid var(--att);border-radius:0 8px 8px 0;padding:8px 12px;max-width:78ch;font-size:14px;color:var(--fg2)}
+.note b{color:var(--fg)}
+.note.k{border-color:var(--k)} .note.v{border-color:var(--v)}
+.ref{font-family:var(--f-mono);font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:0 5px;white-space:nowrap}
+
+table.tbl{border-collapse:collapse;font-size:13px;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.tbl th{font-size:11px;font-weight:500;color:var(--muted);text-align:right;padding:3px 10px 4px 0;white-space:nowrap}
+.tbl td{padding:3px 10px 3px 0;text-align:right;border-top:1px solid var(--line);white-space:nowrap}
+.tbl td.l,.tbl th.l{text-align:left}
+.tbl tr.hl td{background:color-mix(in srgb,var(--v) 12%,transparent)}
+.tbl td.one,.tbl th.one{color:var(--k);font-weight:500}
+.scroll{overflow-x:auto;max-width:100%}
+
+.derive{display:flex;flex-direction:column;gap:12px;counter-reset:st}
+.dstep{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px}
+.dstep>b{counter-increment:st;font-family:var(--f-mono);font-size:12px;width:26px;height:26px;border:1px solid var(--line);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--muted);margin-top:2px}
+.dstep>b::before{content:counter(st)}
+.dstep h4{margin:0;font-family:var(--f-display);font-size:16px;font-weight:600}
+.dstep p{color:var(--fg2);font-size:14px;max-width:66ch;margin-top:2px}
+.calc{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;margin-top:6px;font-family:var(--f-mono);font-size:13px;display:flex;flex-direction:column;gap:3px;overflow-x:auto;max-width:100%}
+.calc .r{white-space:nowrap}
+.calc .hi{color:var(--v);font-weight:500}
+.calc .kk{color:var(--k)}
+.mat2{display:inline-grid;grid-template-columns:auto auto;gap:2px 14px;padding:2px 10px;border-left:2px solid var(--fg2);border-right:2px solid var(--fg2);border-radius:5px;vertical-align:middle;text-align:right}
+.mat2.v{grid-template-columns:auto}
+.eq{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;white-space:nowrap}
+
+.bars{display:flex;flex-direction:column;gap:3px;font-family:var(--f-mono);font-size:12px}
+.wrow{display:grid;grid-template-columns:62px minmax(0,1fr) 58px;gap:8px;align-items:center}
+.wrow .nm{color:var(--fg2);text-align:right}
+.wtrack{position:relative;height:12px;background:var(--surface2);border-radius:3px;border:1px solid var(--line)}
+.wtrack::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;border-left:1px solid var(--muted)}
+.wfill{position:absolute;top:0;bottom:0;border-radius:2px}
+.wfill.p{background:var(--q)} .wfill.n{background:var(--k)}
+.wrow .vl{text-align:right;font-variant-numeric:tabular-nums}
+
+.xaug{display:grid;gap:3px;font-family:var(--f-mono);font-size:12px;font-variant-numeric:tabular-nums;align-items:center}
+.xaug>div{padding:4px 6px;text-align:right;background:var(--surface2);border:1px solid var(--line);border-radius:4px;white-space:nowrap}
+.xaug .h{background:transparent;border-color:transparent;color:var(--muted);font-size:11px;white-space:normal;line-height:1.2}
+.xaug .one{background:color-mix(in srgb,var(--k) 18%,transparent);border-color:var(--k);color:var(--fg)}
+.xaug .wv{background:color-mix(in srgb,var(--q) 14%,transparent);border-color:var(--q)}
+.xaug .op{background:transparent;border-color:transparent;text-align:center;color:var(--muted);font-size:16px}
+.xaug .yv{background:color-mix(in srgb,var(--v) 14%,transparent);border-color:var(--v)}
+.terms{font-family:var(--f-mono);font-size:13px;display:flex;flex-direction:column;gap:2px;overflow-x:auto}
+.terms .tt{white-space:nowrap}
+.terms .bias{color:var(--k);font-weight:500}
+.fails{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.fcard{background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.fcard h4{margin:0;font-family:var(--f-display);font-size:15px}
+.fcard p{font-size:14px;color:var(--fg2)}
+pre.code{margin:0;background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;font-family:var(--f-mono);font-size:12.5px;line-height:1.55}
+.fine{font-size:12px;color:var(--muted);max-width:90ch}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media (max-width:520px){.card{padding:14px}.slid input[type=range]{width:100px}}
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <p class="eyebrow">COMP0169 · CW1 · Question 1 · notes W1 §3–4, W2 §1–2 and §6</p>
+  <h1>Least squares, drawn</h1>
+  <p class="lede">Q1 is one idea used three times. <b>nsolve</b> finds the weights <span class="f">w</span> that satisfy <span class="f">XᵀX w = Xᵀy</span>. <b>line_fit</b> gives it an <span class="f">X</span> with a column of ones added. <b>poly_fit</b> gives it an <span class="f">X</span> with columns of squares and products added. Every plot is computed live from the numbers beside it, so drag things.</p>
+  <div class="map">
+    <div><span class="f">nsolve(X, y)</span><span>Solves the normal equation. Sections 1, 2, 3 and 7.</span></div>
+    <div><span class="f">line_fit(X, y)</span><span>Adds the ones column, calls nsolve. Section 4.</span></div>
+    <div><span class="f">poly_fit(X, y)</span><span>Adds squares and products, calls nsolve. Section 5.</span></div>
+    <div><span class="f">test cells, plots</span><span>Train and test error, the y against ŷ plot. Section 6.</span></div>
+  </div>
+</header>
+
+<nav class="steps" aria-label="Sections">
+  <a href="#s1"><b>1</b><span>The loss</span></a>
+  <a href="#s2"><b>2</b><span>Normal equation</span></a>
+  <a href="#s3"><b>3</b><span>Geometry</span></a>
+  <a href="#s4"><b>4</b><span>line_fit</span></a>
+  <a href="#s5"><b>5</b><span>poly_fit</span></a>
+  <a href="#s6"><b>6</b><span>Your Iris results</span></a>
+  <a href="#s7"><b>7</b><span>Singular XᵀX</span></a>
+  <a href="#s8"><b>8</b><span>Your cells</span></a>
+</nav>
+
+<section class="card" id="s1" aria-labelledby="h1a">
+  <div><h2 id="h1a">1 · What nsolve looks for</h2>
+  <p class="sub">A line has two numbers: a slope <span class="f">w</span> and an intercept <span class="f">b</span>. Each data point pays the square of how far the line misses it (the orange squares). Least squares picks the line with the smallest total <span class="ref">W1 §3.1</span>. Drag the line's ends, the orange dot on the right, or the points themselves.</p></div>
+  <div class="bar">
+    <div class="ctl"><span class="lbl">Ones column</span><div class="seg" id="segBias"><button data-v="1" aria-pressed="true">on (line_fit)</button><button data-v="0" aria-pressed="false">off</button></div></div>
+    <div class="ctl"><span class="lbl">Right-hand axes</span><div class="seg" id="segCentre"><button data-v="0" aria-pressed="true">slope, intercept</button><button data-v="1" aria-pressed="false">centred</button></div></div>
+    <div class="slid" id="slW"><label for="wSl">w</label><input type="range" id="wSl" min="-1" max="3" step="0.01"><output id="wOut"></output></div>
+    <div class="slid" id="slB"><label for="bSl">b</label><input type="range" id="bSl" min="-4" max="6" step="0.01"><output id="bOut"></output></div>
+  </div>
+  <div class="bar">
+    <button class="btn primary" data-act="jump">Jump: one Newton step</button>
+    <button class="btn" data-act="rand">Random line</button>
+    <button class="btn" data-act="newdata">New data</button>
+  </div>
+  <div class="two">
+    <figure class="fig"><svg class="plot" id="labL" role="img" aria-label="Seven data points, your line, and the squared error of each point drawn as an orange square. The dashed green line is the least-squares line."></svg>
+      <figcaption>data space: x against y</figcaption></figure>
+    <figure class="fig"><svg class="plot" id="labR" role="img" aria-label="Total squared error for every slope and intercept, drawn as elliptical contour rings around a green star at the minimum. The orange dot is your current line."></svg>
+      <figcaption id="capR">parameter space: every possible (w, b)</figcaption></figure>
+  </div>
+  <div class="legend"><span><i style="border-color:var(--q)"></i>your line</span><span><i class="b" style="border-color:var(--k);background:color-mix(in srgb,var(--k) 20%,transparent)"></i>squared error of a point</span><span><i class="d" style="border-color:var(--v)"></i>nsolve's line</span><span><i class="c" style="background:var(--k)"></i>your (w, b)</span><span><i class="b" style="border-color:var(--att)"></i>rings: equal total error</span></div>
+  <div class="stats" id="labStats"></div>
+  <p class="note">The right plot is the total squared error for every <span class="f">(w, b)</span>. It is a bowl, and each ring is a line of equal error. The green star is the bottom, and it is the answer nsolve returns. The slope of the bowl at your dot is the pair of numbers <span class="f">∂J/∂w, ∂J/∂b</span>: both are zero at the star.</p>
+  <p class="note k"><b>Try it.</b> Switch the ones column off. The line must pass through the origin, so the dot can only slide along the dashed line <span class="f">b = 0</span>, and the star moves to the best spot on that line. The hollow star is the better answer you gave up. Then switch the axes to centred: the rings turn rounder, which is why the notes centre the data first <span class="ref">W1 §3.1</span> <span class="ref">W2 §2.3</span>.</p>
+</section>
+
+<section class="card" id="s2" aria-labelledby="h2a">
+  <div><h2 id="h2a">2 · Where XᵀXw = Xᵀy comes from</h2>
+  <p class="sub">Same points as section 1, written as matrices. Four steps take you from the squares to the equation nsolve solves <span class="ref">W2 §1.5</span>. The numbers are live: drag a point or the line in section 1 and they change.</p></div>
+  <div class="two wide-l">
+    <div class="derive" id="derive"></div>
+    <div><h3>Your points as X and y</h3><div class="scroll" id="xyTable" style="margin-top:8px"></div></div>
+  </div>
+</section>
+
+<section class="card" id="s3" aria-labelledby="h3a">
+  <div><h2 id="h3a">3 · The same equation as geometry</h2>
+  <p class="sub">Take two data points, one feature and no ones column. Each column of X is then an arrow in the plane: one axis per data point. Fitting means finding the point <span class="f">w·x</span> on the line through <span class="f">x</span> that is closest to <span class="f">y</span>. Drag any of the three dots, or use the slider.</p></div>
+  <div class="bar"><div class="slid"><label for="gW">w</label><input type="range" id="gW" min="-0.5" max="2" step="0.005"><output id="gWOut"></output></div>
+    <button class="btn" data-act="gsnap">Snap w to the closest point</button></div>
+  <div class="two">
+    <figure class="fig"><svg class="plot" id="geo" role="img" aria-label="Arrow x, arrow y, the prediction w times x on the line through x, and the miss e from y to the prediction. At the best w the miss meets the line at a right angle."></svg>
+      <figcaption>axes: value for data point 1, value for data point 2</figcaption></figure>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="stats" id="geoStats"></div>
+      <p class="note v"><b>Closest means a right angle.</b> The miss <span class="f">e = ŷ − y</span> is shortest when it meets the line at 90°, which means <span class="f">x·e = 0</span>. Written out, <span class="f">xᵀ(xw − y) = 0</span>, which is <span class="f">XᵀXw = Xᵀy</span> with one column. Solving gives <span class="f">w = Σxy / Σx²</span> <span class="ref">W2 §1.2</span>.</p>
+      <p class="note">With more columns, e is at a right angle to every column of X at once. That is <span class="f">Xᵀe = 0</span>, the matrix equation. In section 1 the two numbers <span class="f">Σe</span> and <span class="f">Σx·e</span> are exactly these dot products, with the ones column and with x.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="s4" aria-labelledby="h4a">
+  <div><h2 id="h4a">4 · line_fit: add a column of ones</h2>
+  <p class="sub">A line <span class="f">y = w·x + b</span> has an intercept that the columns of X cannot produce on their own. Append a column of ones and b becomes one more weight <span class="ref">W1 §3.5</span>. Your line_fit puts the ones last, so the last weight is b. Below is your Q1b fit on the real Iris split: the matrix, the weights, and one flower done by hand.</p></div>
+  <div class="two">
+    <div><h3>X_aug · w = ŷ (first 4 training flowers)</h3><div class="scroll" id="xaug" style="margin-top:8px"></div></div>
+    <div><h3>One test flower, term by term</h3><div class="terms" id="terms" style="margin-top:8px"></div></div>
+  </div>
+  <p class="note k" id="centreNote"></p>
+</section>
+
+<section class="card" id="s5" aria-labelledby="h5a">
+  <div><h2 id="h5a">5 · poly_fit: more columns, same solver</h2>
+  <p class="sub">poly_fit does not change nsolve. It changes X: the columns become <span class="f">1, x, x², x³, …</span>. The curve bends, but the model is still linear in <span class="f">w</span>, so the error is still a bowl and <span class="f">XᵀXw = Xᵀy</span> still finds its bottom <span class="ref">W1 §3.4</span>. The catch is that more columns can fit the noise. Pick a degree.</p></div>
+  <div class="bar"><div class="ctl"><span class="lbl">Degree d</span><div class="seg" id="segDeg"></div></div>
+    <div class="ctl"><span class="lbl">Test points</span><div class="seg" id="segTest"><button data-v="1" aria-pressed="true">show</button><button data-v="0" aria-pressed="false">hide</button></div></div></div>
+  <div class="two wide-l">
+    <figure class="fig"><svg class="plot" id="polyL" role="img" aria-label="Ten training points, twenty test points, the true curve, and the polynomial fitted to the training points at the chosen degree."></svg>
+      <figcaption>10 training points, 20 test points, one fitted curve</figcaption></figure>
+    <figure class="fig"><svg class="plot" id="polyR" role="img" aria-label="Training and test error for each degree from 1 to 9 on a log scale. Training error always falls; test error falls and then rises."></svg>
+      <figcaption>error by degree (log scale). Click a degree.</figcaption></figure>
+  </div>
+  <div class="legend"><span><i style="border-color:var(--q)"></i>fitted curve</span><span><i class="d" style="border-color:var(--muted)"></i>true curve</span><span><i class="c" style="background:var(--fg)"></i>training point</span><span><i class="b" style="border-color:var(--h1)"></i>test point</span><span><i style="border-color:var(--att)"></i>train error</span><span><i style="border-color:var(--h1)"></i>test error</span></div>
+  <div class="stats" id="polyStats"></div>
+  <div><h3>X for this degree (first 3 training points) and the weights nsolve returns</h3><div class="scroll" id="polyTbl" style="margin-top:8px"></div></div>
+  <p class="note" id="polyNote"></p>
+</section>
+
+<section class="card" id="s6" aria-labelledby="h6a">
+  <div><h2 id="h6a">6 · Your Iris results, live</h2>
+  <p class="sub">The same computation as your notebook, run here on the same 135 / 15 split (<span class="f">random_state=42</span>). Q1b predicts petal length with line_fit. Q1c predicts petal width with poly_fit. You can also mix: any target, line or quadratic.</p></div>
+  <div class="bar">
+    <div class="ctl"><span class="lbl">Preset</span><div class="seg" id="segPre"><button data-v="b" aria-pressed="true">Q1b line_fit</button><button data-v="c" aria-pressed="false">Q1c poly_fit</button></div></div>
+    <div class="ctl"><span class="lbl">Predict</span><div class="seg" id="segTgt"></div></div>
+    <div class="ctl"><span class="lbl">Model</span><div class="seg" id="segMod"><button data-v="line" aria-pressed="true">linear</button><button data-v="poly" aria-pressed="false">quadratic</button></div></div>
+    <div class="ctl"><span class="lbl">Training points</span><div class="seg" id="segTr"><button data-v="1" aria-pressed="true">show</button><button data-v="0" aria-pressed="false">hide</button></div></div>
+  </div>
+  <div class="two">
+    <figure class="fig"><svg class="plot" id="irisP" role="img" aria-label="Predicted value against true value for the held-out Iris test flowers. Points on the diagonal are perfect predictions."></svg>
+      <figcaption id="irisCap"></figcaption></figure>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="stats" id="irisStats"></div>
+      <div><h3>The weights nsolve returned</h3><div class="bars" id="irisW" style="margin-top:8px"></div></div>
+    </div>
+  </div>
+  <p class="note">Reading the plot: a point on the diagonal is a perfect prediction. The vertical distance from a magenta point to the diagonal is its miss, and the test MSE is the average of those misses squared <span class="ref">W1 §4.4</span>. Test error is higher than train error because the weights were fitted to the training flowers and never saw the test ones. The baseline is the error of always predicting the training mean, the reference the notes recommend.</p>
+</section>
+
+<section class="card" id="s7" aria-labelledby="h7a">
+  <div><h2 id="h7a">7 · When XᵀX cannot be inverted</h2>
+  <p class="sub">nsolve needs the inverse of <span class="f">XᵀX</span>, so the columns of X must carry different information. Take two columns and make the second look more and more like the first. The bowl stretches into a trough, and the answer stops being unique <span class="ref">W1 §3.1</span> <span class="ref">W2 §2.3</span>.</p></div>
+  <div class="bar"><div class="ctl"><span class="lbl">Column 2 differs from column 1 by</span><div class="seg" id="segGap"></div></div></div>
+  <div class="two">
+    <figure class="fig"><svg class="plot" id="singP" role="img" aria-label="Error contours for two weights. As the two columns become identical the rings stretch into a long trough."></svg>
+      <figcaption>weight space (w₁, w₂). Diamond: pinv answer. Star: inv answer.</figcaption></figure>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="scroll"><table class="tbl" id="singT"></table></div>
+      <p class="note" id="singNote"></p>
+    </div>
+  </div>
+  <div><h3>What numpy did when I ran it</h3>
+  <div class="fails" style="margin-top:8px">
+    <div class="fcard"><h4>Identical columns</h4><p><span class="f">np.linalg.inv</span> raises <span class="f">LinAlgError: Singular matrix</span>. Your except branch runs and <span class="f">pinv</span> returns the minimum-norm answer.</p></div>
+    <div class="fcard"><h4>Columns differing by about 1e-9</h4><p><span class="f">inv</span> returns numbers around ±10<sup>7</sup> with opposite signs and raises no error, so the except branch never runs. <span class="f">pinv</span> returns the sensible answer.</p></div>
+    <div class="fcard"><h4>Fewer rows than columns</h4><p>3 rows, 5 columns: XᵀX has rank 3. <span class="f">inv</span> still returned five numbers without an error. Any of the infinite exact fits would do, and <span class="f">inv</span> picked arbitrary ones.</p></div>
+  </div>
+<pre class="code" style="margin-top:10px">a = np.random.randn(9); y = np.random.randn(9)
+M = np.column_stack([a, a + 1e-9 * np.random.randn(9)])
+np.linalg.inv(M.T @ M) @ (M.T @ y)    # huge opposite-sign numbers, no error
+np.linalg.pinv(M.T @ M) @ (M.T @ y)   # two equal, small numbers</pre></div>
+</section>
+
+<section class="card" id="s8" aria-labelledby="h8a">
+  <div><h2 id="h8a">8 · Three things to check in your cells</h2>
+  <p class="sub">Found while reproducing your notebook's numbers. Your Q1b and Q1c results reproduce exactly (section 6), so the maths is right. These are about the code around it.</p></div>
+  <div class="fails">
+    <div class="fcard"><h4>nsolve crashes as written</h4><p>The line <span class="f">np.column_stack([np.ones(X.shape[0], 1), X])</span> raises <span class="f">TypeError: Cannot interpret '1' as a data type</span>, because the second argument of <span class="f">np.ones</span> is a dtype. The array printed under your test cell must come from an earlier version. <span class="f">Aug_X</span> is never used afterwards, so delete the line. The ones column belongs in line_fit, where you already have it.</p></div>
+    <div class="fcard"><h4>Inverse versus solve</h4><p>The notes say to use a stable solver and not to form the inverse explicitly <span class="ref">W1 §3.1</span> <span class="ref">W2 §1.5</span>. <span class="f">np.linalg.solve(XᵀX, Xᵀy)</span> does that. Your <span class="f">pinv</span> fallback matches the notes' <span class="f">X†y</span>. Section 7 shows that the except branch only fires on an exactly singular matrix.</p></div>
+    <div class="fcard"><h4>Two meanings of "L2 error"</h4><p>line_fit returns <span class="f">Σe²</span> and poly_fit returns <span class="f">Σe²/N</span>. The notes report MSE <span class="ref">W1 §4.4</span>. Return the same quantity from both, and say which one in the docstring. Your test cells already divide by N, so the printed numbers are MSE.</p></div>
+  </div>
+</section>
+<p class="fine">Method: the browser runs the same normal-equation solve as your notebook. Weights, train and test MSE, baselines and condition numbers were checked against numpy on your split: Q1b 0.09254 / 0.16249 and Q1c 0.03098 / 0.04956. Section 7's numpy behaviour was run in this session.</p>
+</div>
+<script>
+const IRIS=[[5.1,3.5,1.4,0.2],[4.9,3.0,1.4,0.2],[4.7,3.2,1.3,0.2],[4.6,3.1,1.5,0.2],[5.0,3.6,1.4,0.2],[5.4,3.9,1.7,0.4],[4.6,3.4,1.4,0.3],[5.0,3.4,1.5,0.2],[4.4,2.9,1.4,0.2],[4.9,3.1,1.5,0.1],[5.4,3.7,1.5,0.2],[4.8,3.4,1.6,0.2],[4.8,3.0,1.4,0.1],[4.3,3.0,1.1,0.1],[5.8,4.0,1.2,0.2],[5.7,4.4,1.5,0.4],[5.4,3.9,1.3,0.4],[5.1,3.5,1.4,0.3],[5.7,3.8,1.7,0.3],[5.1,3.8,1.5,0.3],[5.4,3.4,1.7,0.2],[5.1,3.7,1.5,0.4],[4.6,3.6,1.0,0.2],[5.1,3.3,1.7,0.5],[4.8,3.4,1.9,0.2],[5.0,3.0,1.6,0.2],[5.0,3.4,1.6,0.4],[5.2,3.5,1.5,0.2],[5.2,3.4,1.4,0.2],[4.7,3.2,1.6,0.2],[4.8,3.1,1.6,0.2],[5.4,3.4,1.5,0.4],[5.2,4.1,1.5,0.1],[5.5,4.2,1.4,0.2],[4.9,3.1,1.5,0.2],[5.0,3.2,1.2,0.2],[5.5,3.5,1.3,0.2],[4.9,3.6,1.4,0.1],[4.4,3.0,1.3,0.2],[5.1,3.4,1.5,0.2],[5.0,3.5,1.3,0.3],[4.5,2.3,1.3,0.3],[4.4,3.2,1.3,0.2],[5.0,3.5,1.6,0.6],[5.1,3.8,1.9,0.4],[4.8,3.0,1.4,0.3],[5.1,3.8,1.6,0.2],[4.6,3.2,1.4,0.2],[5.3,3.7,1.5,0.2],[5.0,3.3,1.4,0.2],[7.0,3.2,4.7,1.4],[6.4,3.2,4.5,1.5],[6.9,3.1,4.9,1.5],[5.5,2.3,4.0,1.3],[6.5,2.8,4.6,1.5],[5.7,2.8,4.5,1.3],[6.3,3.3,4.7,1.6],[4.9,2.4,3.3,1.0],[6.6,2.9,4.6,1.3],[5.2,2.7,3.9,1.4],[5.0,2.0,3.5,1.0],[5.9,3.0,4.2,1.5],[6.0,2.2,4.0,1.0],[6.1,2.9,4.7,1.4],[5.6,2.9,3.6,1.3],[6.7,3.1,4.4,1.4],[5.6,3.0,4.5,1.5],[5.8,2.7,4.1,1.0],[6.2,2.2,4.5,1.5],[5.6,2.5,3.9,1.1],[5.9,3.2,4.8,1.8],[6.1,2.8,4.0,1.3],[6.3,2.5,4.9,1.5],[6.1,2.8,4.7,1.2],[6.4,2.9,4.3,1.3],[6.6,3.0,4.4,1.4],[6.8,2.8,4.8,1.4],[6.7,3.0,5.0,1.7],[6.0,2.9,4.5,1.5],[5.7,2.6,3.5,1.0],[5.5,2.4,3.8,1.1],[5.5,2.4,3.7,1.0],[5.8,2.7,3.9,1.2],[6.0,2.7,5.1,1.6],[5.4,3.0,4.5,1.5],[6.0,3.4,4.5,1.6],[6.7,3.1,4.7,1.5],[6.3,2.3,4.4,1.3],[5.6,3.0,4.1,1.3],[5.5,2.5,4.0,1.3],[5.5,2.6,4.4,1.2],[6.1,3.0,4.6,1.4],[5.8,2.6,4.0,1.2],[5.0,2.3,3.3,1.0],[5.6,2.7,4.2,1.3],[5.7,3.0,4.2,1.2],[5.7,2.9,4.2,1.3],[6.2,2.9,4.3,1.3],[5.1,2.5,3.0,1.1],[5.7,2.8,4.1,1.3],[6.3,3.3,6.0,2.5],[5.8,2.7,5.1,1.9],[7.1,3.0,5.9,2.1],[6.3,2.9,5.6,1.8],[6.5,3.0,5.8,2.2],[7.6,3.0,6.6,2.1],[4.9,2.5,4.5,1.7],[7.3,2.9,6.3,1.8],[6.7,2.5,5.8,1.8],[7.2,3.6,6.1,2.5],[6.5,3.2,5.1,2.0],[6.4,2.7,5.3,1.9],[6.8,3.0,5.5,2.1],[5.7,2.5,5.0,2.0],[5.8,2.8,5.1,2.4],[6.4,3.2,5.3,2.3],[6.5,3.0,5.5,1.8],[7.7,3.8,6.7,2.2],[7.7,2.6,6.9,2.3],[6.0,2.2,5.0,1.5],[6.9,3.2,5.7,2.3],[5.6,2.8,4.9,2.0],[7.7,2.8,6.7,2.0],[6.3,2.7,4.9,1.8],[6.7,3.3,5.7,2.1],[7.2,3.2,6.0,1.8],[6.2,2.8,4.8,1.8],[6.1,3.0,4.9,1.8],[6.4,2.8,5.6,2.1],[7.2,3.0,5.8,1.6],[7.4,2.8,6.1,1.9],[7.9,3.8,6.4,2.0],[6.4,2.8,5.6,2.2],[6.3,2.8,5.1,1.5],[6.1,2.6,5.6,1.4],[7.7,3.0,6.1,2.3],[6.3,3.4,5.6,2.4],[6.4,3.1,5.5,1.8],[6.0,3.0,4.8,1.8],[6.9,3.1,5.4,2.1],[6.7,3.1,5.6,2.4],[6.9,3.1,5.1,2.3],[5.8,2.7,5.1,1.9],[6.8,3.2,5.9,2.3],[6.7,3.3,5.7,2.5],[6.7,3.0,5.2,2.3],[6.3,2.5,5.0,1.9],[6.5,3.0,5.2,2.0],[6.2,3.4,5.4,2.3],[5.9,3.0,5.1,1.8]];
+const IRIS_TEST=[9,12,18,19,31,36,64,68,73,76,78,82,110,118,141];
+
+// ==CORE-START==
+const MINUS = "−";
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function gauss(rng){let u=0;while(u===0)u=rng();const v=rng();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function gram(X){const n=X.length,p=X[0].length,G=Array.from({length:p},()=>new Array(p).fill(0));
+  for(let i=0;i<n;i++)for(let a=0;a<p;a++)for(let b=a;b<p;b++)G[a][b]+=X[i][a]*X[i][b];
+  for(let a=0;a<p;a++)for(let b=0;b<a;b++)G[a][b]=G[b][a];return G}
+function xty(X,y){const p=X[0].length,r=new Array(p).fill(0);for(let i=0;i<X.length;i++)for(let a=0;a<p;a++)r[a]+=X[i][a]*y[i];return r}
+// Gaussian elimination with partial pivoting. Returns null only on an exactly zero pivot (like numpy's LinAlgError).
+function solve(A,b){const n=A.length,M=A.map((r,i)=>[...r,b[i]]);
+  for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;
+    if(M[p][c]===0)return null;[M[c],M[p]]=[M[p],M[c]];
+    for(let r=c+1;r<n;r++){const f=M[r][c]/M[c][c];for(let k=c;k<=n;k++)M[r][k]-=f*M[c][k]}}
+  const x=new Array(n);for(let i=n-1;i>=0;i--){let s=M[i][n];for(let k=i+1;k<n;k++)s-=M[i][k]*x[k];x[i]=s/M[i][i]}return x}
+// Jacobi eigen-decomposition of a symmetric matrix. Columns of vecs are eigenvectors.
+function eigSym(A){const n=A.length,a=A.map(r=>r.slice()),V=Array.from({length:n},(_,i)=>Array.from({length:n},(_,j)=>i===j?1:0));
+  let tr=0;for(let i=0;i<n;i++)tr+=Math.abs(a[i][i]);const tol=(1e-16*tr)**2;
+  for(let sw=0;sw<80;sw++){let off=0;for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)off+=a[i][j]*a[i][j];if(off<=tol)break;
+    for(let p=0;p<n-1;p++)for(let q=p+1;q<n;q++){if(a[p][q]===0)continue;
+      const th=(a[q][q]-a[p][p])/(2*a[p][q]),t=(th>=0?1:-1)/(Math.abs(th)+Math.sqrt(th*th+1)),c=1/Math.sqrt(t*t+1),s=t*c;
+      for(let k=0;k<n;k++){const x=a[k][p],y=a[k][q];a[k][p]=c*x-s*y;a[k][q]=s*x+c*y}
+      for(let k=0;k<n;k++){const x=a[p][k],y=a[q][k];a[p][k]=c*x-s*y;a[q][k]=s*x+c*y}
+      for(let k=0;k<n;k++){const x=V[k][p],y=V[k][q];V[k][p]=c*x-s*y;V[k][q]=s*x+c*y}}}
+  const vals=a.map((r,i)=>r[i]),ord=vals.map((v,i)=>i).sort((i,j)=>vals[j]-vals[i]);
+  return {vals:ord.map(i=>vals[i]),vecs:V.map(r=>ord.map(i=>r[i]))}}
+// pinv(A) @ b for symmetric PSD A: drop eigenvalues below rtol * largest (numpy-style cutoff)
+function pinvSolve(A,b,rtol=4.4e-16*Math.max(A.length,1)){const {vals,vecs}=eigSym(A),n=A.length,tol=rtol*Math.max(vals[0],0),x=new Array(n).fill(0);
+  for(let k=0;k<n;k++){if(vals[k]<=tol)continue;let d=0;for(let i=0;i<n;i++)d+=vecs[i][k]*b[i];d/=vals[k];for(let i=0;i<n;i++)x[i]+=d*vecs[i][k]}return x}
+const condSym=A=>{const {vals}=eigSym(A);return vals[vals.length-1]>0?vals[0]/vals[vals.length-1]:Infinity};
+// The normal equation. Falls back to the pseudo-inverse only on an exactly singular matrix, like the try/except in the notebook.
+function nsolveJS(X,y){const A=gram(X),b=xty(X,y);return solve(A,b)||pinvSolve(A,b)}
+const mse=(X,w,y)=>{let s=0;for(let i=0;i<X.length;i++){let p=0;for(let k=0;k<w.length;k++)p+=X[i][k]*w[k];s+=(p-y[i])**2}return s/X.length};
+const predict=(X,w)=>X.map(r=>r.reduce((s,v,k)=>s+v*w[k],0));
+// Iris design matrices, as in line_fit (ones LAST) and poly_fit (ones FIRST, then x, then x_i*x_j for i<=j)
+const lineCols=r=>[...r,1];
+const polyCols=r=>{const c=[1,...r];for(let i=0;i<r.length;i++)for(let j=i;j<r.length;j++)c.push(r[i]*r[j]);return c};
+function irisTask(target,model){
+  const inputs=[0,1,2,3].filter(i=>i!==target),test=new Set(IRIS_TEST);
+  const f=model==="poly"?polyCols:lineCols,tr=[],te=[];
+  IRIS.forEach((row,i)=>{const o={x:f(inputs.map(k=>row[k])),y:row[target]};(test.has(i)?te:tr).push(o)});
+  // training order must not matter, but keep dataset order
+  const Xtr=tr.map(o=>o.x),ytr=tr.map(o=>o.y),Xte=te.map(o=>o.x),yte=te.map(o=>o.y);
+  const w=nsolveJS(Xtr,ytr),A=gram(Xtr),mean=ytr.reduce((s,v)=>s+v,0)/ytr.length;
+  return {inputs,w,Xtr,ytr,Xte,yte,trainMSE:mse(Xtr,w,ytr),testMSE:mse(Xte,w,yte),
+    baseTest:yte.reduce((s,v)=>s+(v-mean)**2,0)/yte.length,cond:condSym(A),pte:predict(Xte,w),ptr:predict(Xtr,w)}}
+// ==CORE-END==
+if(typeof module!=="undefined")module.exports={MINUS,mulberry32,gauss,gram,xty,solve,eigSym,pinvSolve,condSym,nsolveJS,mse,predict,irisTask,lineCols,polyCols};
+
+// ===== helpers =====
+const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const nf = (v, d = 2) => { if (!isFinite(v)) return v > 0 ? "∞" : v < 0 ? MINUS + "∞" : "NaN"; const t = (Math.abs(v) < 0.5 * Math.pow(10, -d) ? 0 : v).toFixed(d); return t[0] === "-" ? MINUS + t.slice(1) : t; };
+const sci = (v, d = 1) => { if (!isFinite(v)) return "∞"; if (v === 0) return "0"; const [m, e] = v.toExponential(d).split("e"); return `${m[0] === "-" ? MINUS + m.slice(1) : m}×10<sup>${+e < 0 ? MINUS + Math.abs(+e) : +e}</sup>`; };
+const num = (v, d = 3) => (Math.abs(v) >= 1e5 || (v !== 0 && Math.abs(v) < 1e-3)) ? sci(v, 1) : nf(v, d);
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function tween(ms, fn, done) {
+  if (reduceMotion || ms <= 0) { fn(1); done && done(); return; }
+  const t0 = performance.now();
+  (function step(t) { const u = Math.min(1, (t - t0) / ms), e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2; fn(e); if (u < 1) requestAnimationFrame(step); else done && done(); })(t0);
+}
+function seg(el, onPick) { el.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; $$("button", el).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); onPick(b.dataset.v); }); }
+function setSeg(el, v) { $$("button", el).forEach(x => x.setAttribute("aria-pressed", x.dataset.v === String(v) ? "true" : "false")); }
+function niceTicks(lo, hi, n = 5) { const raw = (hi - lo) / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p, s = (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p, out = []; for (let t = Math.ceil(lo / s) * s; t <= hi + 1e-9; t += s) out.push(+t.toFixed(10)); return out; }
+const tl = t => String(t).replace("-", MINUS);
+const starPts = (cx, cy, R, r) => Array.from({ length: 10 }, (_, i) => { const a = -Math.PI / 2 + i * Math.PI / 5, q = i % 2 ? r : R; return `${(cx + q * Math.cos(a)).toFixed(1)},${(cy + q * Math.sin(a)).toFixed(1)}`; }).join(" ");
+
+class Plot {
+  constructor(svg, W, H, m, xr, yr) { Object.assign(this, { svg, W, H, m, xr, yr }); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); }
+  px(x) { return this.m.l + (x - this.xr[0]) / (this.xr[1] - this.xr[0]) * (this.W - this.m.l - this.m.r); }
+  py(y) { return this.H - this.m.b - (y - this.yr[0]) / (this.yr[1] - this.yr[0]) * (this.H - this.m.t - this.m.b); }
+  ix(p) { return this.xr[0] + (p - this.m.l) / (this.W - this.m.l - this.m.r) * (this.xr[1] - this.xr[0]); }
+  iy(p) { return this.yr[0] + (this.H - this.m.b - p) / (this.H - this.m.t - this.m.b) * (this.yr[1] - this.yr[0]); }
+  data(e) { const r = this.svg.getBoundingClientRect(); return [this.ix((e.clientX - r.left) * this.W / r.width), this.iy((e.clientY - r.top) * this.H / r.height)]; }
+  clip(id) { return `<clipPath id="${id}"><rect x="${this.m.l}" y="${this.m.t}" width="${this.W - this.m.l - this.m.r}" height="${this.H - this.m.t - this.m.b}"/></clipPath>`; }
+  axes({ xt, yt, xl, yl, xf = tl, yf = tl }) {
+    let s = "";
+    for (const t of xt) { const X = this.px(t); s += `<line class="grid" x1="${X}" y1="${this.m.t}" x2="${X}" y2="${this.H - this.m.b}"/><text x="${X}" y="${this.H - this.m.b + 15}" text-anchor="middle">${xf(t)}</text>`; }
+    for (const t of yt) { const Y = this.py(t); s += `<line class="grid" x1="${this.m.l}" y1="${Y}" x2="${this.W - this.m.r}" y2="${Y}"/><text x="${this.m.l - 6}" y="${Y + 4}" text-anchor="end">${yf(t)}</text>`; }
+    s += `<rect x="${this.m.l}" y="${this.m.t}" width="${this.W - this.m.l - this.m.r}" height="${this.H - this.m.t - this.m.b}" fill="none" class="axis"/>`;
+    if (xl) s += `<text x="${(this.m.l + this.W - this.m.r) / 2}" y="${this.H - 4}" text-anchor="middle" class="big">${xl}</text>`;
+    if (yl) s += `<text transform="translate(12 ${(this.m.t + this.H - this.m.b) / 2}) rotate(-90)" text-anchor="middle" class="big">${yl}</text>`;
+    return s;
+  }
+}
+function dragger(plot, onMove, onEnd) {
+  const svg = plot.svg; let cur = null;
+  svg.addEventListener("pointerdown", e => { const h = e.target.closest("[data-h]"); if (!h) return; cur = h.dataset.h; svg.setPointerCapture(e.pointerId); e.preventDefault(); onMove(cur, plot.data(e), true); });
+  svg.addEventListener("pointermove", e => { if (cur) onMove(cur, plot.data(e), false); });
+  const end = () => { if (cur) { cur = null; onEnd && onEnd(); } };
+  svg.addEventListener("pointerup", end); svg.addEventListener("pointercancel", end);
+}
+const stat = (label, val, cls = "") => `<div class="stat ${cls}"><span>${label}</span><b>${val}</b></div>`;
+const vec2 = (a, b) => `<span class="mat2 v"><span>${a}</span><span>${b}</span></span>`;
+const mat2 = (a, b, c, d) => `<span class="mat2"><span>${a}</span><span>${b}</span><span>${c}</span><span>${d}</span></span>`;
+
+// ===== section 1: the lab =====
+const lab = (() => {
+  const XR = [0, 5], YR = [0, 6.5], WR = [-1, 3], BR = [-4, 6], XA = 0.8, XB = 4.2;
+  const L = new Plot($("#labL"), 440, 340, { l: 38, r: 12, t: 12, b: 34 }, XR, YR);
+  const R = new Plot($("#labR"), 440, 340, { l: 46, r: 12, t: 12, b: 34 }, WR, BR);
+  const st = { pts: [], w: 0.15, b: 3.6, bSaved: 3.6, bias: true, centre: false, seed: 0 };
+  const listeners = [];
+  function newData(k) {
+    const r = mulberry32(1000 + k * 77);
+    st.pts = Array.from({ length: 7 }, (_, i) => { const x = 0.4 + 4.2 * (i + 0.2 + 0.6 * r()) / 7; return { x, y: clamp(0.9 * x + 1 + 0.55 * gauss(r), 0.25, 6.2) }; });
+  }
+  function calc() {
+    const P = st.pts, N = P.length, y = P.map(p => p.y), xm = P.reduce((s, p) => s + p.x, 0) / N, off = st.centre ? xm : 0;
+    const Xv = P.map(p => [p.x - off, 1]), G = gram(Xv), r = xty(Xv, y), sv = solve(G, r) || pinvSolve(G, r);
+    const sxx = P.reduce((s, p) => s + p.x * p.x, 0), sxy = P.reduce((s, p) => s + p.x * p.y, 0), w0 = sxx > 0 ? sxy / sxx : 0;
+    const J = (w, b) => P.reduce((s, p) => s + (w * p.x + b - p.y) ** 2, 0) / (2 * N);
+    return { P, N, y, xm, off, G, H: G.map(r_ => r_.map(v => v / N)), sv, wS: sv[0], bS: sv[1] - sv[0] * off, w0, J };
+  }
+  const view = (c, w, b) => [w, b + w * c.off];
+  function ellipse(c, center, delta) {
+    const { vals, vecs } = eigSym(c.H), r1 = Math.sqrt(2 * delta / Math.max(vals[0], 1e-12)), r2 = Math.sqrt(2 * delta / Math.max(vals[1], 1e-12));
+    let d = ""; for (let i = 0; i <= 72; i++) { const t = i / 72 * 2 * Math.PI, a = r1 * Math.cos(t), bb = r2 * Math.sin(t), x = center[0] + a * vecs[0][0] + bb * vecs[0][1], y = center[1] + a * vecs[1][0] + bb * vecs[1][1]; d += `${i ? "L" : "M"}${R.px(x).toFixed(1)} ${R.py(y).toFixed(1)}`; }
+    return d + "Z";
+  }
+  function drawLeft(c) {
+    const { P } = c, { w, b } = st, yh = x => w * x + b, ppu = Math.abs(L.py(0) - L.py(1));
+    let s = `<defs>${L.clip("clL")}</defs>` + L.axes({ xt: [0, 1, 2, 3, 4, 5], yt: [0, 2, 4, 6], xl: "x", yl: "y" }) + `<g clip-path="url(#clL)">`;
+    P.forEach(p => { const e = yh(p.x) - p.y, side = Math.abs(e) * ppu, top = Math.min(L.py(p.y), L.py(yh(p.x))); s += `<rect class="sq" x="${L.px(p.x)}" y="${top}" width="${side}" height="${side}"/>`; });
+    s += `<line class="best" x1="${L.px(XR[0])}" y1="${L.py(c.wS * XR[0] + c.bS)}" x2="${L.px(XR[1])}" y2="${L.py(c.wS * XR[1] + c.bS)}"/>`;
+    s += `<line class="fit" x1="${L.px(XR[0])}" y1="${L.py(yh(XR[0]))}" x2="${L.px(XR[1])}" y2="${L.py(yh(XR[1]))}"/>`;
+    P.forEach((p, i) => { s += `<circle class="pt" cx="${L.px(p.x)}" cy="${L.py(p.y)}" r="5.5"/><circle class="hit" data-h="p${i}" cx="${L.px(p.x)}" cy="${L.py(p.y)}" r="14"/>`; });
+    s += `</g>`;
+    const hs = st.bias ? [["A", XA], ["B", XB]] : [["B", XB]];
+    hs.forEach(([n, x]) => { s += `<circle class="grab" cx="${L.px(x)}" cy="${L.py(clamp(yh(x), -0.3, 6.8))}" r="7"/><circle class="hit" data-h="${n}" cx="${L.px(x)}" cy="${L.py(clamp(yh(x), -0.3, 6.8))}" r="17"/>`; });
+    $("#labL").innerHTML = s;
+  }
+  function drawRight(c) {
+    R.yr = st.centre ? [0, 6.5] : BR;
+    const [mw, mv] = view(c, st.w, st.b), [sw, sv] = c.sv, Jmin = c.J(c.wS, c.bS), dm = c.J(st.w, st.b) - Jmin;
+    let s = `<defs>${R.clip("clR")}<marker id="ahR" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="mk-k"/></marker></defs>`;
+    s += R.axes({ xt: [-1, 0, 1, 2, 3], yt: st.centre ? [0, 2, 4, 6] : [-4, -2, 0, 2, 4, 6], xl: "slope w", yl: st.centre ? "value at mean x" : "intercept b" }) + `<g clip-path="url(#clR)">`;
+    [0.04, 0.15, 0.5, 1.4, 3.2].forEach(d => { s += `<path class="ring" d="${ellipse(c, c.sv, d)}"/>`; });
+    if (dm > 1e-4) s += `<path class="ring me" d="${ellipse(c, c.sv, dm)}"/>`;
+    if (!st.bias) {
+      s += `<line class="cons" x1="${R.px(WR[0])}" y1="${R.py(WR[0] * c.off)}" x2="${R.px(WR[1])}" y2="${R.py(WR[1] * c.off)}"/>`;
+      s += `<polygon class="star hollow" points="${starPts(R.px(sw), R.py(sv), 11, 4.5)}"/>`;
+    }
+    const sx = st.bias ? sw : c.w0, sy = st.bias ? sv : c.w0 * c.off;
+    s += `<polygon class="star" points="${starPts(R.px(sx), R.py(sy), 12, 5)}"/>`;
+    if (st.bias && dm > 1e-3) {   // downhill arrow: the gradient does not point straight at the star
+      const dlt = [mw - sw, mv - sv], g = [c.H[0][0] * dlt[0] + c.H[0][1] * dlt[1], c.H[1][0] * dlt[0] + c.H[1][1] * dlt[1]], n = Math.hypot(g[0], g[1]) || 1, eps = 1e-3 / n;
+      const p0 = [R.px(mw), R.py(mv)], p1 = [R.px(mw - g[0] * eps), R.py(mv - g[1] * eps)], q = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+      s += `<line x1="${p0[0]}" y1="${p0[1]}" x2="${p0[0] + (p1[0] - p0[0]) / q * 40}" y2="${p0[1] + (p1[1] - p0[1]) / q * 40}" stroke="var(--k)" stroke-width="2.2" marker-end="url(#ahR)"/>`;
+    }
+    s += `<circle class="dot" cx="${R.px(mw)}" cy="${R.py(mv)}" r="7.5"/><circle class="hit" data-h="theta" cx="${R.px(mw)}" cy="${R.py(mv)}" r="18"/></g>`;
+    s += `<text x="${R.px(sx) + 12}" y="${R.py(sy) - 10}" class="big" style="fill:var(--v)">nsolve</text>`;
+    if (!st.bias) s += `<text x="${R.px(sw) + 12}" y="${R.py(sv) - 10}">best with a ones column</text>`;
+    $("#labR").innerHTML = s;
+  }
+  function readouts(c) {
+    const { P, N } = c, e = P.map(p => st.w * p.x + st.b - p.y), SSE = e.reduce((s, v) => s + v * v, 0), gw = P.reduce((s, p, i) => s + p.x * e[i], 0) / N, gb = e.reduce((s, v) => s + v, 0) / N;
+    const Jm = c.J(c.wS, c.bS), mseS = 2 * Jm, cond = condSym(c.H);
+    $("#labStats").innerHTML = stat("SSE = Σe²", nf(SSE, 2)) + stat("MSE = SSE / N", nf(SSE / N, 3)) + stat("J = MSE / 2", nf(SSE / N / 2, 3)) +
+      stat("∂J/∂w, ∂J/∂b here", `${nf(gw, 2)}, ${nf(gb, 2)}`, Math.hypot(gw, gb) < 0.02 ? "good" : "warn") +
+      stat("MSE at nsolve's star", nf(st.bias ? mseS : 2 * c.J(c.w0, 0), 3), "good") + stat("ring shape κ = λmax/λmin", nf(cond, 1));
+    $("#capR").textContent = st.bias ? (st.centre ? "parameter space: slope, and the line's height at mean x" : "parameter space: every possible (w, b)") : "parameter space: with b locked at 0 you can only slide along the dashed line";
+  }
+  function sync() {
+    $("#wSl").value = st.w; $("#bSl").value = st.b; $("#wOut").textContent = nf(st.w); $("#bOut").textContent = nf(st.b);
+    $("#slB").classList.toggle("off", !st.bias); $("#bSl").disabled = !st.bias;
+  }
+  function update() { const c = calc(); drawLeft(c); drawRight(c); readouts(c); sync(); listeners.forEach(f => f(c)); }
+  dragger(L, (n, [x, y]) => {
+    if (n[0] === "p") { const i = +n.slice(1); st.pts[i] = { x: clamp(x, 0.05, 4.95), y: clamp(y, 0.1, 6.4) }; }
+    else if (!st.bias) { st.w = clamp(clamp(y, 0, 6.5) / XB, WR[0], WR[1]); st.b = 0; }
+    else { const yA = st.w * XA + st.b, yB = st.w * XB + st.b, ny = clamp(y, 0, 6.5), a = n === "A" ? ny : yA, bb = n === "B" ? ny : yB; st.w = clamp((bb - a) / (XB - XA), WR[0], WR[1]); st.b = clamp(a - st.w * XA, BR[0], BR[1]); }
+    update();
+  });
+  dragger(R, (n, [w, v]) => {
+    const c = calc(); st.w = clamp(w, WR[0], WR[1]);
+    st.b = st.bias ? clamp(v - st.w * c.off, BR[0], BR[1]) : 0; update();
+  });
+  $("#wSl").addEventListener("input", e => { st.w = +e.target.value; update(); });
+  $("#bSl").addEventListener("input", e => { st.b = +e.target.value; update(); });
+  seg($("#segBias"), v => { st.bias = v === "1"; if (!st.bias) { st.bSaved = st.b; st.b = 0; } else st.b = st.bSaved; update(); });
+  seg($("#segCentre"), v => { st.centre = v === "1"; update(); });
+  function animateTo(w, b, ms = 900) { const w0 = st.w, b0 = st.b; tween(ms, e => { st.w = w0 + (w - w0) * e; st.b = b0 + (b - b0) * e; update(); }); }
+  function jump() {   // one Newton step: theta - H^-1 grad  (W2 6.2)
+    const c = calc(), X = c.P.map(p => [p.x, 1]), G = gram(X), r = xty(X, c.y), N = c.N;
+    if (st.bias) { const g = [(G[0][0] * st.w + G[0][1] * st.b - r[0]) / N, (G[1][0] * st.w + G[1][1] * st.b - r[1]) / N], H = G.map(q => q.map(v => v / N)), d = solve(H, [-g[0], -g[1]]) || pinvSolve(H, [-g[0], -g[1]]); animateTo(st.w + d[0], st.b + d[1]); }
+    else { const g = (G[0][0] * st.w - r[0]) / N, h = G[0][0] / N; animateTo(st.w - g / h, 0); }
+  }
+  $("#s1").addEventListener("click", e => {
+    const a = e.target.closest("[data-act]"); if (!a) return;
+    if (a.dataset.act === "jump") jump();
+    if (a.dataset.act === "rand") { const r = mulberry32((Math.random() * 1e9) | 0); animateTo(-0.5 + 3 * r(), st.bias ? -3 + 8 * r() : 0, 350); }
+    if (a.dataset.act === "newdata") { st.seed++; newData(st.seed); update(); }
+  });
+  newData(0); update();
+  return { get: () => ({ ...st, calc: calc() }), onChange: f => { listeners.push(f); f(calc()); }, scatterThenJump() { const r = mulberry32((Math.random() * 1e9) | 0); st.w = -0.5 + 3 * r(); st.b = st.bias ? -3 + 8 * r() : 0; update(); setTimeout(jump, 700); document.getElementById("s1").scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" }); } };
+})();
+
+// ===== section 2: the derivation, with live numbers =====
+(() => {
+  const el = $("#derive"), tb = $("#xyTable");
+  function render(c) {
+    const s = lab.get(), P = c.P, N = c.N, w = s.w, b = s.b, X = P.map(p => [p.x, 1]), G = gram(X), r = xty(X, c.y);
+    const sol = solve(G, r) || pinvSolve(G, r), e = P.map(p => w * p.x + b - p.y), J = e.reduce((a, v) => a + v * v, 0) / (2 * N);
+    const gw = P.reduce((a, p, i) => a + p.x * e[i], 0) / N, gb = e.reduce((a, v) => a + v, 0) / N;
+    const g2 = [(G[0][0] * sol[0] + G[0][1] * sol[1] - r[0]) / N, (G[1][0] * sol[0] + G[1][1] * sol[1] - r[1]) / N];
+    const Hm = G.map(q => q.map(v => v / N)), ev = eigSym(Hm).vals;
+    el.innerHTML = `
+    <div class="dstep"><b></b><div><h4>Write the error as one sum</h4>
+      <p>Each point contributes a square. Dividing by 2N is for tidy derivatives and does not move the minimum <span class="ref">W2 §1.2</span>.</p>
+      <div class="calc"><div class="r">J(w, b) = 1/(2N) · Σ (w·xᵢ + b − yᵢ)² = ½ · mean(e²)</div><div class="r">at your line (w = ${nf(w)}, b = ${nf(b)}):  J = <span class="kk">${nf(J, 3)}</span></div></div></div></div>
+    <div class="dstep"><b></b><div><h4>Take the slope of the bowl in each direction</h4>
+      <p>Differentiate each square: the chain rule gives <span class="f">eᵢ</span> times the thing w multiplies, which is <span class="f">xᵢ</span> for w and <span class="f">1</span> for b. In matrix form that is <span class="f">∇J = (1/N) Xᵀ(Xθ − y)</span>: each column of X gives one equation <span class="ref">W2 §1.4</span>.</p>
+      <div class="calc"><div class="r">∂J/∂w = (1/N) Σ xᵢ·eᵢ = <span class="kk">${nf(gw, 3)}</span></div><div class="r">∂J/∂b = (1/N) Σ eᵢ&nbsp;&nbsp;&nbsp; = <span class="kk">${nf(gb, 3)}</span>&nbsp;&nbsp;(e = w·x + b − y, at your line)</div></div></div></div>
+    <div class="dstep"><b></b><div><h4>Set both slopes to zero</h4>
+      <p>The bottom of the bowl is flat. Expanding the two equations and moving the unknowns to one side gives a 2×2 linear system. The entries are dot products of the columns of X: that is what <span class="f">XᵀX</span> is <span class="ref">W1 §3.1</span>.</p>
+      <div class="calc"><div class="r">w·Σx² + b·Σx = Σxy &nbsp;&nbsp;&nbsp; w·Σx + b·N = Σy</div>
+        <div class="eq">${mat2(nf(G[0][0], 2), nf(G[0][1], 2), nf(G[1][0], 2), nf(G[1][1], 2))} <span>·</span> ${vec2("w", "b")} <span>=</span> ${vec2(nf(r[0], 2), nf(r[1], 2))}</div>
+        <div class="r">XᵀX&nbsp;·&nbsp;θ&nbsp;=&nbsp;Xᵀy</div></div></div></div>
+    <div class="dstep"><b></b><div><h4>Solve it</h4>
+      <p>Two equations, two unknowns. In code, <span class="f">w = (XᵀX)⁻¹Xᵀy</span> is this solve written compactly. Check: plug the answer back in and both slopes should be zero (up to rounding).</p>
+      <div class="calc"><div class="r hi">w = ${nf(sol[0], 4)} &nbsp;&nbsp; b = ${nf(sol[1], 4)}</div><div class="r">slopes there: ∂J/∂w = ${sci(g2[0], 0)}, ∂J/∂b = ${sci(g2[1], 0)}</div></div>
+      <p style="margin-top:8px">Why this is a minimum and not a maximum: the curvature of J is <span class="f">H = XᵀX/N</span>, here with eigenvalues ${nf(ev[0], 2)} and ${nf(ev[1], 3)}, both positive, so the bowl opens upward <span class="ref">W2 §6.1</span>. Because J is exactly quadratic, one Newton step <span class="f">θ − H⁻¹∇J</span> from any start lands on the bottom <span class="ref">W2 §6.2</span>.</p>
+      <div style="margin-top:8px"><button class="btn primary" id="scatterBtn">Scatter the line, then take one Newton step</button></div></div></div>`;
+    $("#scatterBtn").onclick = () => lab.scatterThenJump();
+    tb.innerHTML = `<table class="tbl"><thead><tr><th class="l">i</th><th>x</th><th class="one">1</th><th>y</th><th>e</th></tr></thead><tbody>${P.map((p, i) => `<tr><td class="l">${i + 1}</td><td>${nf(p.x, 2)}</td><td class="one">1</td><td>${nf(p.y, 2)}</td><td>${nf(e[i], 2)}</td></tr>`).join("")}
+      <tr><td class="l">Σ</td><td>${nf(P.reduce((a, p) => a + p.x, 0), 2)}</td><td class="one">${N}</td><td>${nf(c.y.reduce((a, v) => a + v, 0), 2)}</td><td>${nf(e.reduce((a, v) => a + v, 0), 2)}</td></tr></tbody></table>
+      <p class="fine" style="margin-top:8px">X is the two columns <span class="f">x</span> and <span class="f">1</span> (7×2). The column e is the miss at your current line. Σe and Σx·e are the two slopes times N.</p>`;
+  }
+  lab.onChange(render);
+})();
+
+// ===== section 3: geometry =====
+(() => {
+  const G = new Plot($("#geo"), 400, 400, { l: 36, r: 14, t: 14, b: 36 }, [-1, 5], [-1, 5]);
+  const st = { x: [3.3, 1.2], y: [1.9, 3.7], w: 0.6 };
+  function draw() {
+    const [x1, x2] = st.x, [y1, y2] = st.y, xx = x1 * x1 + x2 * x2, wS = (x1 * y1 + x2 * y2) / xx, w = st.w;
+    const yh = [w * x1, w * x2], e = [yh[0] - y1, yh[1] - y2], dot = x1 * e[0] + x2 * e[1], e2 = e[0] ** 2 + e[1] ** 2;
+    const eS = [wS * x1 - y1, wS * x2 - y2], e2S = eS[0] ** 2 + eS[1] ** 2, P = (a, b) => [G.px(a), G.py(b)];
+    const mk = (id, c) => `<marker id="${id}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0 0 10 5 0 10z" class="${c}"/></marker>`;
+    let s = `<defs>${G.clip("clG")}${mk("gq", "mk-q")}${mk("gf", "mk-fg")}${mk("gk", "mk-k")}</defs>` + G.axes({ xt: [0, 1, 2, 3, 4], yt: [0, 1, 2, 3, 4], xl: "data point 1", yl: "data point 2" });
+    const o = P(0, 0), n = Math.hypot(x1, x2), ux = [x1 / n, x2 / n];
+    s += `<g clip-path="url(#clG)"><line class="truth" x1="${P(-8 * ux[0], -8 * ux[1])[0]}" y1="${P(-8 * ux[0], -8 * ux[1])[1]}" x2="${P(8 * ux[0], 8 * ux[1])[0]}" y2="${P(8 * ux[0], 8 * ux[1])[1]}"/>`;
+    const pe = P(...yh), py_ = P(y1, y2), px_ = P(x1, x2), pS = P(wS * x1, wS * x2);
+    s += `<line x1="${o[0]}" y1="${o[1]}" x2="${py_[0]}" y2="${py_[1]}" class="vec" stroke="var(--fg)" marker-end="url(#gf)" opacity=".85"/>`;
+    s += `<line x1="${o[0]}" y1="${o[1]}" x2="${px_[0]}" y2="${px_[1]}" class="vec" stroke="var(--q)" marker-end="url(#gq)"/>`;
+    s += `<line x1="${py_[0]}" y1="${py_[1]}" x2="${pe[0]}" y2="${pe[1]}" stroke="var(--k)" stroke-width="2.5" stroke-dasharray="5 4" marker-end="url(#gk)"/>`;
+    const cosA = Math.abs(dot) / (n * Math.sqrt(e2) || 1);
+    if (cosA < 0.02 && e2 > 1e-4) {   // right-angle mark at the foot: one side back towards the origin, one side towards y
+      const ua = [-ux[0], -ux[1]], ub = [-e[0] / Math.sqrt(e2), -e[1] / Math.sqrt(e2)], q = 13, A = [pe[0] + ua[0] * q, pe[1] - ua[1] * q], Bp = [pe[0] + ub[0] * q, pe[1] - ub[1] * q], C = [A[0] + Bp[0] - pe[0], A[1] + Bp[1] - pe[1]];
+      s += `<polyline points="${A} ${C} ${Bp}" fill="none" stroke="var(--v)" stroke-width="2"/>`;
+    }
+    s += `<polygon class="star hollow" points="${starPts(pS[0], pS[1], 9, 3.8)}" style="stroke:var(--v)"/>`;
+    s += `<circle class="dot" cx="${pe[0]}" cy="${pe[1]}" r="6.5" style="fill:var(--v)"/><circle class="hit" data-h="yh" cx="${pe[0]}" cy="${pe[1]}" r="17"/>`;
+    s += `<circle class="grab" cx="${px_[0]}" cy="${px_[1]}" r="7"/><circle class="hit" data-h="x" cx="${px_[0]}" cy="${px_[1]}" r="17"/>`;
+    s += `<circle class="pt" cx="${py_[0]}" cy="${py_[1]}" r="6.5"/><circle class="hit" data-h="y" cx="${py_[0]}" cy="${py_[1]}" r="17"/></g>`;
+    s += `<text class="big" x="${px_[0] + 10}" y="${px_[1] - 8}" style="fill:var(--q)">x</text><text class="big" x="${py_[0] + 10}" y="${py_[1] - 8}">y</text>`;
+    s += `<text x="${pe[0] + 10}" y="${pe[1] + 18}" style="fill:var(--v)">ŷ = w·x</text><text x="${(py_[0] + pe[0]) / 2 + 8}" y="${(py_[1] + pe[1]) / 2}" style="fill:var(--k)">e</text>`;
+    $("#geo").innerHTML = s;
+    $("#geoStats").innerHTML = stat("w (your slider)", nf(w, 3)) + stat("w* = Σxy / Σx²", nf(wS, 3), "good") + stat("x·e = Σxᵢeᵢ", nf(dot, 3), Math.abs(dot) < 0.02 ? "good" : "warn") + stat("‖e‖² now", nf(e2, 3)) + stat("‖e‖² at w*", nf(e2S, 3), "good");
+    $("#gW").value = w; $("#gWOut").textContent = nf(w, 2);
+  }
+  dragger(G, (nme, [a, b]) => {
+    if (nme === "x") { const v = [clamp(a, -0.5, 4.9), clamp(b, -0.5, 4.9)]; if (Math.hypot(...v) > 0.5) st.x = v; }
+    else if (nme === "y") st.y = [clamp(a, -0.5, 4.9), clamp(b, -0.5, 4.9)];
+    else st.w = clamp((a * st.x[0] + b * st.x[1]) / (st.x[0] ** 2 + st.x[1] ** 2), -0.5, 2);
+    draw();
+  });
+  $("#gW").addEventListener("input", e => { st.w = +e.target.value; draw(); });
+  $("#s3").addEventListener("click", e => { if (e.target.closest('[data-act="gsnap"]')) { const [x1, x2] = st.x, [y1, y2] = st.y, t = clamp((x1 * y1 + x2 * y2) / (x1 * x1 + x2 * x2), -0.5, 2), w0 = st.w; tween(500, u => { st.w = w0 + (t - w0) * u; draw(); }); } });
+  draw();
+})();
+
+// ===== section 4: the ones column, on your real Q1b fit =====
+(() => {
+  const t = irisTask(2, "line"), nm = ["sepal length", "sepal width", "petal width", "1 (ones)"], w = t.w;
+  let h = `<div class="xaug" style="grid-template-columns:62px repeat(4,minmax(70px,1fr)) 56px 58px 58px">`;
+  h += `<div class="h"></div>${nm.map((n, i) => `<div class="h${i === 3 ? " one" : ""}" style="text-align:center">${n}</div>`).join("")}<div class="h"></div><div class="h">ŷ</div><div class="h">y</div>`;
+  h += `<div class="h">w</div>${w.map((v, i) => `<div class="wv${i === 3 ? " one" : ""}">${nf(v, 3)}</div>`).join("")}<div class="h"></div><div class="h"></div><div class="h"></div>`;
+  for (let i = 0; i < 4; i++) h += `<div class="h">flower ${i + 1}</div>${t.Xtr[i].map((v, j) => `<div class="${j === 3 ? "one" : ""}">${nf(v, 1)}</div>`).join("")}<div class="op">·w =</div><div class="yv">${nf(t.ptr[i], 2)}</div><div>${nf(t.ytr[i], 1)}</div>`;
+  $("#xaug").innerHTML = h + `</div><p class="fine" style="margin-top:8px">Blue: the weights from nsolve. Orange: the ones column. Every row of X is multiplied by the same w, so the last weight is added to every prediction.</p>`;
+  const x = t.Xte[0], y = t.yte[0], fl = ["sepal length", "sepal width", "petal width", "ones"];
+  let lines = "", sum = 0;
+  x.forEach((v, i) => { const p = w[i] * v; sum += p; lines += `<div class="tt${i === 3 ? " bias" : ""}">${nf(w[i], 3).padStart(7, " ")} × ${nf(v, 1).padStart(4, " ")} = ${nf(p, 3).padStart(7, " ")} &nbsp;${fl[i]}</div>`; });
+  $("#terms").innerHTML = `<div class="tt" style="color:var(--muted)">a test flower: inputs ${x.slice(0, 3).map(v => nf(v, 1)).join(", ")}, true petal length ${nf(y, 1)} cm</div>${lines}<div class="tt" style="border-top:1px solid var(--line);margin-top:2px;padding-top:2px"><b>${nf(sum, 3).padStart(26, " ")}</b> = ŷ, miss ${nf(sum - y, 3)}</div><div class="tt" style="color:var(--muted);margin-top:4px">With all three measurements at 0 the model predicts the bias, ${nf(w[3], 3)}.</div>`;
+  // the notes' other route (W1 3.1): centre, solve without a ones column, then b = ybar - w.xbar
+  const n = t.Xtr.length, xm = [0, 1, 2].map(k => t.Xtr.reduce((a, r) => a + r[k], 0) / n), ym = t.ytr.reduce((a, v) => a + v, 0) / n;
+  const Xc = t.Xtr.map(r => [0, 1, 2].map(k => r[k] - xm[k])), yc = t.ytr.map(v => v - ym), wc = nsolveJS(Xc, yc), bc = ym - wc.reduce((a, v, k) => a + v * xm[k], 0);
+  $("#centreNote").innerHTML = `<b>Two routes, one answer.</b> With the ones column: b = ${nf(w[3], 6)}. The notes' other route centres X and y first, solves without a ones column, then sets <span class="f">b = ȳ − w·x̄</span> <span class="ref">W1 §3.1</span>: b = ${nf(bc, 6)}. The slopes agree too (largest difference ${sci(Math.max(...wc.map((v, k) => Math.abs(v - w[k]))), 0)}). Both routes are the same model.`;
+})();
+
+// ===== section 5: poly_fit on a curve =====
+(() => {
+  const f = x => 0.8 * Math.sin(2.6 * x) + 0.25 * x, r = mulberry32(21), noise = 0.2, tr = [], te = [];
+  for (let i = 0; i < 10; i++) { const x = -0.95 + 1.9 * (i + 0.15 + 0.7 * r()) / 10; tr.push({ x, y: f(x) + noise * gauss(r) }); }
+  for (let i = 0; i < 20; i++) { const x = -1 + 2 * r(); te.push({ x, y: f(x) + noise * gauss(r) }); }
+  const cols = (x, d) => Array.from({ length: d + 1 }, (_, k) => x ** k), ytr = tr.map(p => p.y), yte = te.map(p => p.y), FL = 0.005;
+  const fits = {}; for (let d = 1; d <= 9; d++) { const X = tr.map(p => cols(p.x, d)), w = nsolveJS(X, ytr); fits[d] = { w, tr: mse(X, w, ytr), te: mse(te.map(p => cols(p.x, d)), w, yte), k: condSym(gram(X)) }; }
+  const best = Object.keys(fits).map(Number).reduce((a, d) => fits[d].te < fits[a].te ? d : a, 1);
+  const A = new Plot($("#polyL"), 560, 320, { l: 40, r: 12, t: 12, b: 34 }, [-1.05, 1.05], [-1.5, 1.5]);
+  const B = new Plot($("#polyR"), 440, 320, { l: 46, r: 16, t: 12, b: 34 }, [0.5, 9.5], [Math.log10(FL), 2]);
+  const st = { d: 3, test: true }, lg = v => Math.log10(Math.max(v, FL));
+  $("#segDeg").innerHTML = Array.from({ length: 9 }, (_, i) => `<button data-v="${i + 1}" aria-pressed="${i + 1 === st.d}">${i + 1}</button>`).join("");
+  function draw() {
+    const F = fits[st.d], ff = x => F.w.reduce((s, c, k) => s + c * x ** k, 0);
+    let s = `<defs>${A.clip("clA")}</defs>` + A.axes({ xt: [-1, -0.5, 0, 0.5, 1], yt: [-1, 0, 1], xl: "x", yl: "y" }) + `<g clip-path="url(#clA)">`;
+    let d1 = "", d2 = ""; for (let i = 0; i <= 240; i++) { const x = -1.05 + 2.1 * i / 240; d1 += `${i ? "L" : "M"}${A.px(x).toFixed(1)} ${A.py(clamp(ff(x), -6, 6)).toFixed(1)}`; d2 += `${i ? "L" : "M"}${A.px(x).toFixed(1)} ${A.py(f(x)).toFixed(1)}`; }
+    s += `<path class="truth" d="${d2}"/><path class="fit" d="${d1}"/>`;
+    if (st.test) te.forEach(p => { s += `<rect class="te hollow" x="${A.px(p.x) - 4}" y="${A.py(p.y) - 4}" width="8" height="8"/>`; });
+    tr.forEach(p => { s += `<circle class="pt" cx="${A.px(p.x)}" cy="${A.py(p.y)}" r="5.5"/>`; });
+    $("#polyL").innerHTML = s + `</g>`;
+    let q = B.axes({ xt: [1, 2, 3, 4, 5, 6, 7, 8, 9], yt: [-2, -1, 0, 1, 2], xl: "degree d", yl: "mean squared error", yf: t => ["0.01", "0.1", "1", "10", "100"][t + 2] });
+    q += `<rect class="sel" x="${B.px(st.d - 0.5)}" y="${B.m.t}" width="${B.px(st.d + 0.5) - B.px(st.d - 0.5)}" height="${B.H - B.m.t - B.m.b}"/>`;
+    const L1 = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => `${B.px(d)},${B.py(lg(fits[d].tr))}`).join(" "), L2 = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => `${B.px(d)},${B.py(lg(fits[d].te))}`).join(" ");
+    q += `<polyline class="ln-tr" points="${L1}"/><polyline class="ln-te" points="${L2}"/>`;
+    for (let d = 1; d <= 9; d++) { const big = d === st.d ? 1.5 : 1; q += `<circle cx="${B.px(d)}" cy="${B.py(lg(fits[d].tr))}" r="${4 * big}" style="fill:var(--att);stroke:var(--surface2);stroke-width:1.5"/><rect x="${B.px(d) - 4 * big}" y="${B.py(lg(fits[d].te)) - 4 * big}" width="${8 * big}" height="${8 * big}" style="fill:var(--h1);stroke:var(--surface2);stroke-width:1.5"/><rect data-d="${d}" x="${B.px(d - 0.5)}" y="${B.m.t}" width="${B.px(d + 0.5) - B.px(d - 0.5)}" height="${B.H - B.m.t - B.m.b}" fill="transparent" style="cursor:pointer"/>`; }
+    q += `<text class="big" x="${B.px(9) - 10}" y="${B.py(lg(fits[9].te)) + 5}" text-anchor="end" style="fill:var(--h1)">test</text><text class="big" x="${B.px(9) - 10}" y="${B.py(lg(fits[9].tr)) - 8}" text-anchor="end" style="fill:var(--att)">train${fits[9].tr < FL ? " ≈ 0" : ""}</text>`;
+    $("#polyR").innerHTML = q;
+    $$("#segDeg button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === st.d ? "true" : "false"));
+    $("#polyStats").innerHTML = stat("train MSE", num(F.tr, 3)) + stat("test MSE", num(F.te, 3), F.te > 3 * fits[best].te ? "warn" : st.d === best ? "good" : "") + stat("κ(XᵀX)", sci(F.k, 1)) + stat("weights vs training points", `${st.d + 1} vs ${tr.length}`) + stat("lowest test MSE at", `d = ${best}`, "good");
+    const hd = Array.from({ length: st.d + 1 }, (_, k) => `<th>${k === 0 ? "1" : k === 1 ? "x" : `x<sup>${k}</sup>`}</th>`).join("");
+    $("#polyTbl").innerHTML = `<table class="tbl"><thead><tr><th class="l">X</th>${hd}</tr></thead><tbody>${[0, 1, 2].map(i => `<tr><td class="l">point ${i + 1}</td>${cols(tr[i].x, st.d).map(v => `<td>${nf(v, 3)}</td>`).join("")}</tr>`).join("")}<tr class="hl"><td class="l">w from nsolve</td>${F.w.map(v => `<td>${num(v, 3)}</td>`).join("")}</tr></tbody></table>`;
+    const msg = st.d <= 2 ? `<b>Too stiff.</b> A degree-${st.d} curve cannot follow the bend, so both errors stay high. That is underfitting.`
+      : st.d <= 5 ? `<b>Flexible enough.</b> The curve follows the bend and the train and test errors are close.`
+      : st.d < 9 ? `<b>Too flexible.</b> The curve starts bending to fit the noise in 10 points. Train error keeps falling while test error climbs. That is overfitting.`
+      : `<b>10 weights for 10 points.</b> The curve passes through every training point, so train error is 0 up to rounding, and the test error is ${num(F.te, 1)}.`;
+    $("#polyNote").innerHTML = `${msg} The lowest test error is at d = ${best}, but choosing d by test error is only allowed in a demo: in real work you would pick it on a validation split <span class="ref">W1 §4.1</span>. Note also that κ grows about tenfold per degree, so section 7's problem arrives gradually. Your Q1c uses d = 2 on three inputs: 1 + 3 + 6 = 10 columns.`;
+  }
+  seg($("#segDeg"), v => { st.d = +v; draw(); });
+  seg($("#segTest"), v => { st.test = v === "1"; draw(); });
+  $("#polyR").addEventListener("click", e => { const h = e.target.closest("[data-d]"); if (h) { st.d = +h.dataset.d; draw(); } });
+  draw();
+})();
+
+// ===== section 6: your Iris results =====
+(() => {
+  const SH = ["sl", "sw", "pl", "pw"], FULL = ["sepal length", "sepal width", "petal length", "petal width"];
+  const st = { tgt: 2, model: "line", train: true };
+  const CHECK = { "2line": [0.09254280323050397, 0.16248765157333142], "3poly": [0.030979074414104208, 0.0495573398144419] };
+  $("#segTgt").innerHTML = FULL.map((n, i) => `<button data-v="${i}" aria-pressed="${i === st.tgt}">${n}</button>`).join("");
+  const P = new Plot($("#irisP"), 420, 420, { l: 46, r: 14, t: 14, b: 40 }, [0, 1], [0, 1]);
+  function colNames(t, model) {
+    const nm = t.inputs.map(k => SH[k]); if (model === "line") return [...nm, "1 (bias)"];
+    const c = ["1 (bias)", ...nm]; for (let i = 0; i < nm.length; i++) for (let j = i; j < nm.length; j++) c.push(i === j ? `${nm[i]}²` : `${nm[i]}·${nm[j]}`); return c;
+  }
+  function draw() {
+    const t = irisTask(st.tgt, st.model), all = [...t.ytr, ...t.yte, ...t.pte, ...t.ptr], lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06;
+    P.xr = [lo - pad, hi + pad]; P.yr = [lo - pad, hi + pad];
+    const tk = niceTicks(lo, hi, 5);
+    let s = `<defs>${P.clip("clI")}</defs>` + P.axes({ xt: tk, yt: tk, xl: `predicted ${FULL[st.tgt]} (cm)`, yl: `true ${FULL[st.tgt]} (cm)`, xf: v => tl(+v.toFixed(2)), yf: v => tl(+v.toFixed(2)) }) + `<g clip-path="url(#clI)">`;
+    s += `<line class="truth" x1="${P.px(P.xr[0])}" y1="${P.py(P.xr[0])}" x2="${P.px(P.xr[1])}" y2="${P.py(P.xr[1])}" style="stroke:var(--fg2);stroke-dasharray:6 5"/>`;
+    if (st.train) t.ptr.forEach((p, i) => { s += `<circle class="tr" cx="${P.px(p)}" cy="${P.py(t.ytr[i])}" r="3.2"/>`; });
+    t.pte.forEach((p, i) => { s += `<line class="res" x1="${P.px(p)}" y1="${P.py(p)}" x2="${P.px(p)}" y2="${P.py(t.yte[i])}"/>`; });
+    t.pte.forEach((p, i) => { s += `<circle class="te" cx="${P.px(p)}" cy="${P.py(t.yte[i])}" r="5.5"/>`; });
+    $("#irisP").innerHTML = s + `</g>`;
+    $("#irisCap").textContent = `${t.yte.length} test flowers (magenta) against ${t.ytr.length} training flowers (grey). Dashed: perfect prediction.`;
+    const key = `${st.tgt}${st.model}`, ck = CHECK[key], ok = ck && Math.abs(t.trainMSE - ck[0]) < 1e-9 && Math.abs(t.testMSE - ck[1]) < 1e-9;
+    $("#irisStats").innerHTML = stat("train MSE", num(t.trainMSE, 4)) + stat("test MSE", num(t.testMSE, 4), "good") + stat("baseline test MSE (predict train mean)", num(t.baseTest, 3)) +
+      stat("test error vs baseline", `${nf(100 * t.testMSE / t.baseTest, 1)}%`) + stat("κ(XᵀX)", sci(t.cond, 1)) + (ck ? stat("your notebook's output", ok ? "✓ identical" : "differs", ok ? "good" : "warn") : stat("your notebook's output", "not a Q1 setup"));
+    const names = colNames(t, st.model), mx = Math.max(...t.w.map(Math.abs));
+    $("#irisW").innerHTML = t.w.map((v, i) => { const wd = Math.abs(v) / mx * 50; return `<div class="wrow"><span class="nm">${names[i]}</span><div class="wtrack"><div class="wfill ${v >= 0 ? "p" : "n"}" style="left:${v >= 0 ? 50 : 50 - wd}%;width:${wd}%"></div></div><span class="vl">${nf(v, 3)}</span></div>`; }).join("") +
+      `<p class="fine" style="margin-top:6px">${st.model === "line" ? "line_fit order: the three inputs, then the ones column last." : "poly_fit order: ones first, the inputs, then every product x<sub>i</sub>·x<sub>j</sub> with i ≤ j."} sl, sw, pl, pw = ${FULL.join(", ")}.</p>`;
+    setSeg($("#segPre"), st.tgt === 2 && st.model === "line" ? "b" : st.tgt === 3 && st.model === "poly" ? "c" : "none");
+    setSeg($("#segTgt"), st.tgt); setSeg($("#segMod"), st.model); setSeg($("#segTr"), st.train ? 1 : 0);
+  }
+  seg($("#segPre"), v => { if (v === "b") { st.tgt = 2; st.model = "line"; } else { st.tgt = 3; st.model = "poly"; } draw(); });
+  seg($("#segTgt"), v => { st.tgt = +v; draw(); });
+  seg($("#segMod"), v => { st.model = v; draw(); });
+  seg($("#segTr"), v => { st.train = v === "1"; draw(); });
+  draw();
+})();
+
+// ===== section 7: when X'X is singular =====
+(() => {
+  const a = [1.2, -0.8, 0.5, 1.6, -1.3, 0.3], b0 = [-0.4, 1.1, -1.0, 0.6, 0.2, -1.5], nz = [0.1, -0.15, 0.05, 0.1, -0.05, 0.12];
+  const y = a.map((v, i) => 0.8 * v - 0.5 * b0[i] + nz[i]), N = a.length;
+  const GAPS = [[1, "1 (independent)"], [0.3, "0.3"], [0.01, "0.01"], [1e-4, "1e-4"], [3e-8, "3e-8"], [0, "0 (identical)"]];
+  $("#segGap").innerHTML = GAPS.map((g, i) => `<button data-v="${i}" aria-pressed="${i === 0}">${g[1]}</button>`).join("");
+  const S = new Plot($("#singP"), 420, 420, { l: 46, r: 14, t: 14, b: 40 }, [-3, 3], [-3, 3]);
+  let idx = 0;
+  function draw() {
+    const g = GAPS[idx][0], bb = a.map((v, i) => (1 - g) * v + g * b0[i]), X = a.map((v, i) => [v, bb[i]]), G = gram(X), r = xty(X, y);
+    const ev = eigSym(G), inv = solve(G, r), pin = pinvSolve(G, r), kap = ev.vals[1] > 0 ? ev.vals[0] / ev.vals[1] : Infinity;
+    const J = w => mse(X, w, y) / 2, lam = ev.vals.map(v => v / N);
+    const ring = d => { const r1 = Math.sqrt(2 * d / Math.max(lam[0], 1e-12)), r2 = lam[1] > 1e-9 * lam[0] ? Math.sqrt(2 * d / lam[1]) : 1e3; let p = ""; for (let i = 0; i <= 90; i++) { const t = i / 90 * 2 * Math.PI, u = r1 * Math.cos(t), v = r2 * Math.sin(t), x = pin[0] + u * ev.vecs[0][0] + v * ev.vecs[0][1], yy = pin[1] + u * ev.vecs[1][0] + v * ev.vecs[1][1]; p += `${i ? "L" : "M"}${S.px(x).toFixed(1)} ${S.py(yy).toFixed(1)}`; } return p + "Z"; };
+    let s = `<defs>${S.clip("clS")}</defs>` + S.axes({ xt: [-3, -2, -1, 0, 1, 2, 3], yt: [-3, -2, -1, 0, 1, 2, 3], xl: "weight w₁ (column 1)", yl: "weight w₂ (column 2)" }) + `<g clip-path="url(#clS)">`;
+    [0.01, 0.05, 0.15, 0.4, 0.9].forEach(d => { s += `<path class="ring" d="${ring(d)}"/>`; });
+    if (kap > 1e6) { const v = [ev.vecs[0][1], ev.vecs[1][1]]; s += `<line class="cons" x1="${S.px(pin[0] - 12 * v[0])}" y1="${S.py(pin[1] - 12 * v[1])}" x2="${S.px(pin[0] + 12 * v[0])}" y2="${S.py(pin[1] + 12 * v[1])}"/>`; }
+    s += `<polygon points="${[0, 1, 2, 3].map(k => [S.px(pin[0]) + [0, 9, 0, -9][k], S.py(pin[1]) + [-9, 0, 9, 0][k]]).join(" ")}" style="fill:var(--k);stroke:var(--surface2);stroke-width:1.5"/>`;
+    if (inv) { const out = Math.abs(inv[0]) > 2.9 || Math.abs(inv[1]) > 2.9, ix = clamp(inv[0], -2.9, 2.9), iy = clamp(inv[1], -2.9, 2.9); s += `<polygon class="star" points="${starPts(S.px(ix), S.py(iy), 12, 5)}"/>`; if (out) s += `<text x="${S.px(ix) + (ix > 0 ? -14 : 14)}" y="${S.py(iy) + (iy > 0 ? 22 : -14)}" text-anchor="${ix > 0 ? "end" : "start"}" style="fill:var(--v)">inv: off the chart</text>`; }
+    $("#singP").innerHTML = s + `</g>`;
+    const fw = w => `(${num(w[0], 3)}, ${num(w[1], 3)})`;
+    $("#singT").innerHTML = `<tbody><tr><td class="l">eigenvalues of XᵀX</td><td>${num(ev.vals[0], 3)} and ${ev.vals[1] > 1e-12 * ev.vals[0] ? num(ev.vals[1], 3) : "≈ 0"}</td></tr>
+      <tr><td class="l">κ = λmax / λmin</td><td>${isFinite(kap) && kap < 1e17 ? sci(kap, 1) : "∞ (singular)"}</td></tr>
+      <tr class="hl"><td class="l">inv(XᵀX) · Xᵀy</td><td>${inv ? fw(inv) : "LinAlgError: Singular matrix"}</td></tr>
+      <tr><td class="l">error J at the inv answer</td><td>${inv ? num(J(inv), 4) : "none"}</td></tr>
+      <tr class="hl"><td class="l">pinv(XᵀX) · Xᵀy</td><td>${fw(pin)}</td></tr>
+      <tr><td class="l">error J at the pinv answer</td><td>${num(J(pin), 4)}</td></tr></tbody>`;
+    const note = idx === 0 ? `<b>Independent columns.</b> The rings are close to round, the bottom is one clear point, and inv and pinv agree.`
+      : g >= 1e-4 ? `<b>Columns alike, matrix still invertible.</b> κ = ${sci(kap, 0)}, so the rings are stretched into a valley. The bottom is still one point, but it is far along the valley, and a small change in y would move it a long way. You lose about ${Math.round(Math.log10(kap))} of the 16 digits float64 carries.`
+      : g > 0 ? `<b>Numerically singular, not exactly.</b> κ = ${sci(kap, 0)} leaves almost no correct digits. The computer can still divide, so inv returns the huge answer above and raises <b>no error</b>: your except branch never runs. Those opposite-sign weights fit y by exploiting a ${GAPS[idx][1]} difference between the columns, smaller than the noise in any real data. pinv treats the tiny eigenvalue as zero and returns the minimum-norm answer, at a higher training error. Right at this edge rounding decides between an error and a huge answer: with a gap of 1e-8 this page's solver raises LinAlgError.`
+      : `<b>Exactly singular.</b> inv raises LinAlgError and your except branch runs. Every point on the dashed valley has the same error, so there is no single answer. pinv picks the valley point closest to the origin, the minimum-norm solution <span class="ref">W1 §3.1</span>.`;
+    $("#singNote").innerHTML = note + ` <span style="color:var(--muted)">Computed here in float64, like numpy.</span>`;
+    setSeg($("#segGap"), idx);
+  }
+  seg($("#segGap"), v => { idx = +v; draw(); });
+  draw();
+})();
+
+</script>
+<script src="nav.js"></script>
+</body>
+</html>
+
+</body></html>
